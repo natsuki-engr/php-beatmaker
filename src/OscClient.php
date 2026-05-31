@@ -1,8 +1,6 @@
 <?php
 
-declare(strict_types=1);
-
-namespace PhpStrudel;
+namespace PhpBeatMaker;
 
 final class OscClient
 {

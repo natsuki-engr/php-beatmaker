@@ -2,8 +2,12 @@
 
 require 'vendor/autoload.php';
 
+use PhpBeatMaker\AudioWsServer;
+use PhpBeatMaker\OscGateway;
 use PhpOSC\OSCClient;
-use PhpOSC\OSCMessage;
+use Ratchet\Http\HttpServer;
+use Ratchet\Server\IoServer;
+use Ratchet\WebSocket\WsServer;
 use React\EventLoop\Loop;
 
 $loop = Loop::get();
@@ -11,14 +15,15 @@ $loop = Loop::get();
 $client = new OSCClient($loop);
 $client->set_destination('127.0.0.1', 57120);
 
-$promise = $client->sendAsync(
-    new OSCMessage('/load', ['pad1', __DIR__ . '/samples/346.wav'])
+$osc = new OscGateway($client);
+
+$server = IoServer::factory(
+    new HttpServer(
+        new WsServer(
+            new AudioWsServer($osc)
+        )
+    ),
+    8080
 );
 
-$promise->then(function () use ($client) {
-    $client->sendAsync(
-        new OSCMessage('/play', ['pad1'])
-    );
-});
-
-$loop->run();
+$server->run();
