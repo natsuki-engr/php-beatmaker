@@ -8,48 +8,77 @@ s.options.numInputBusChannels = 0;
 s.options.outDevice = "Nothing Ear (a)";
 s.reboot;
 
-{ SinOsc.ar(440, 0, 0.1) }.play;
-s.freeAll;
-
-s.boot;
-
-OSCdef(\test, { |msg, time, addr|
-    "received".postln;
-    msg.postln;
-}, '/hello');
-
-n = NetAddr("127.0.0.1", NetAddr.langPort);
-n.sendMsg("/hello", 123);
-
-OSCdef(\play, { |msg|
-    var freq = msg[1];
-
-    {
-        SinOsc.ar(freq, 0, 0.1)
-        * EnvGen.kr(
-            Env.perc(0.01, 0.3),
-            doneAction: 2
-        )
-    }.play;
-}, '/play');
+~samples = IdentityDictionary.new;
 
 (
-SynthDef(\kick, {
-    var env = EnvGen.kr(
-        Env.perc(0.001, 0.2),
+SynthDef(\samplePlayer, {
+    |bufnum, amp = 1|
+
+    var sig;
+
+    sig = PlayBuf.ar(
+        numChannels: 2,
+        bufnum: bufnum,
         doneAction: 2
     );
 
-    var osc = SinOsc.ar(
-        XLine.kr(120, 40, 0.05)
-    );
-
-    Out.ar(0, (osc * env * 0.3) ! 2);
+    Out.ar(0, sig * amp);
 }).add;
 )
 
-OSCdef(\play, { |msg|
-    switch(msg[1],
-        \bd, { Synth(\kick); }
+(
+OSCdef(\loadSample, { |msg|
+
+    var name = msg[1];
+    var path = msg[2].asString;
+
+    Buffer.read(
+        s,
+        path,
+        action: { |buffer|
+
+            ~samples[name] = buffer;
+
+            ("loaded: " ++ name).postln;
+        }
     );
+
+}, '/load');
+)
+
+(
+OSCdef(\playSample, { |msg|
+
+    var name = msg[1];
+    var buffer;
+
+    name.postln;
+    name.class.postln;
+
+    buffer = ~samples[name];
+
+    buffer.postln;
+
+    if(buffer.notNil) {
+        ("bufnum=" ++ buffer.bufnum).postln;
+
+        Synth(
+            \samplePlayer,
+            [
+                \bufnum,
+                buffer.bufnum
+            ]
+        );
+
+    } {
+		("sample not found: " ++ name).postln;
+    };
+
+	buffer = ~samples[name];
+
+	if(buffer.notNil) {
+		("frames=" ++ buffer.numFrames).postln;
+	};
+
 }, '/play');
+)

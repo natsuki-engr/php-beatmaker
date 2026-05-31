@@ -1,14 +1,24 @@
 <?php
 
-declare(strict_types=1);
+require 'vendor/autoload.php';
 
-require __DIR__ . '/vendor/autoload.php';
+use PhpOSC\OSCClient;
+use PhpOSC\OSCMessage;
+use React\EventLoop\Loop;
 
-use PhpStrudel\OscClient;
+$loop = Loop::get();
 
-$osc = new OscClient(
-    '127.0.0.1',
-    57120,
+$client = new OSCClient($loop);
+$client->set_destination('127.0.0.1', 57120);
+
+$promise = $client->sendAsync(
+    new OSCMessage('/load', ['pad1', __DIR__ . '/samples/346.wav'])
 );
 
-$osc->send('/play', 'bd');
+$promise->then(function () use ($client) {
+    $client->sendAsync(
+        new OSCMessage('/play', ['pad1'])
+    );
+});
+
+$loop->run();
