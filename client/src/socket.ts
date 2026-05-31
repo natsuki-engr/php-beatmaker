@@ -1,8 +1,3 @@
-console.log(
-  "`ws://${location.hostname}:5174`",
-  `ws://${location.hostname}:5174`,
-);
-
 const ws = new WebSocket(`ws://${location.hostname}:8080`);
 
 ws.onopen = () => {

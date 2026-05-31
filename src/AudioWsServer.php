@@ -7,6 +7,9 @@ use Ratchet\ConnectionInterface;
 
 class AudioWsServer implements MessageComponentInterface
 {
+    /** @var array<int, array{pad: string, size: int}> */
+    private array $pending = [];
+
     public function __construct(
         private OscGateway $osc
     ) {}
@@ -18,6 +21,11 @@ class AudioWsServer implements MessageComponentInterface
 
     public function onMessage(ConnectionInterface $from, $msg)
     {
+        if (isset($this->pending[$from->resourceId])) {
+            $this->saveUpload($from, $msg);
+            return;
+        }
+
         echo "WS msg: $msg\n";
 
         $data = json_decode($msg, true);
@@ -28,10 +36,9 @@ class AudioWsServer implements MessageComponentInterface
         }
 
         match ($data['type']) {
-
             'play' => $this->play($data),
-
             'load' => $this->load($data),
+            'upload' => $this->upload($from, $data),
 
             default => (function () {
                 echo "unknown type\n";
@@ -64,8 +71,44 @@ class AudioWsServer implements MessageComponentInterface
         $this->osc->load($pad, $path);
     }
 
+    private function upload(ConnectionInterface $from, array $data): void
+    {
+        $pad  = $data['pad']  ?? null;
+        $size = $data['size'] ?? null;
+
+        if (!$pad || !$size) {
+            echo "missing upload params\n";
+            return;
+        }
+
+        $this->pending[$from->resourceId] = ['pad' => $pad, 'size' => $size];
+        echo "expecting upload: pad={$pad}, size={$size}\n";
+    }
+
+    private function saveUpload(ConnectionInterface $from, string $bytes): void
+    {
+        $info = $this->pending[$from->resourceId];
+        unset($this->pending[$from->resourceId]);
+
+        $pad      = $info['pad'];
+        $expected = $info['size'];
+        $actual   = strlen($bytes);
+
+        $dir = __DIR__ . '/../samples/uploads';
+        if (!is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+        $path = "{$dir}/pad-{$pad}.wav";
+
+        file_put_contents($path, $bytes);
+        echo "saved: {$path} ({$actual} bytes, expected {$expected})\n";
+
+        $this->osc->load($pad, $path);
+    }
+
     public function onClose(ConnectionInterface $conn)
     {
+        unset($this->pending[$conn->resourceId]);
         echo "WS closed: {$conn->resourceId}\n";
     }
 
