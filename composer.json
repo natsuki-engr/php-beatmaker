@@ -1,0 +1,17 @@
+{
+    "name": "natsuki/php-strudel",
+    "authors": [
+        {
+            "name": "natsuki ueda",
+            "email": "biafrajr@gmail.com"
+        }
+    ],
+    "require": {
+        "php": "^8.1.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "PhpStrudel\\": "src/"
+        }
+    }
+}
