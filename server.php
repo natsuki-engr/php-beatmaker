@@ -9,6 +9,7 @@ use Ratchet\Http\HttpServer;
 use Ratchet\Server\IoServer;
 use Ratchet\WebSocket\WsServer;
 use React\EventLoop\Loop;
+use React\Socket\SocketServer;
 
 $loop = Loop::get();
 
@@ -17,13 +18,16 @@ $client->set_destination('127.0.0.1', 57120);
 
 $osc = new OscGateway($client);
 
-$server = IoServer::factory(
+$socket = new SocketServer('0.0.0.0:8080', [], $loop);
+
+$server = new IoServer(
     new HttpServer(
         new WsServer(
             new AudioWsServer($osc)
         )
     ),
-    8080
+    $socket,
+    $loop
 );
 
 $server->run();
