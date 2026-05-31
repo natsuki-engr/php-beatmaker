@@ -28,21 +28,28 @@ SynthDef(\samplePlayer, {
 
 (
 OSCdef(\loadSample, { |msg|
-
     var name = msg[1];
     var path = msg[2].asString;
+
+    "--- /load received ---".postln;
+    ("  msg:    " ++ msg).postln;
+    ("  name:   " ++ name ++ "  (" ++ name.class ++ ")").postln;
+    ("  path:   " ++ path).postln;
+    ("  exists: " ++ File.exists(path)).postln;
+
+    ~samples[name].free;
 
     Buffer.read(
         s,
         path,
         action: { |buffer|
-
             ~samples[name] = buffer;
-
-            ("loaded: " ++ name).postln;
+            ("  loaded: bufnum=" ++ buffer.bufnum
+                ++ " frames=" ++ buffer.numFrames
+                ++ " ch=" ++ buffer.numChannels
+                ++ " sr=" ++ buffer.sampleRate).postln;
         }
     );
-
 }, '/load');
 )
 
