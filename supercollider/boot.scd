@@ -89,3 +89,20 @@ OSCdef(\playSample, { |msg|
 
 }, '/play');
 )
+
+s.sampleRate.postln;
+
+~test = Buffer.read(s, "/Users/natsuki/Development/php-beatmaker/samples/346.wav");
+{ PlayBuf.ar(1, ~test.bufnum, doneAction: 2) ! 2 }.play;
+{ PlayBuf.ar(1, ~test, BufRateScale.kr(~test.bufnum), doneAction: 2) }.play;
+{ PlayBuf.ar(2, ~test.bufnum, 48000/44100, doneAction: 2) }.play;
+{ PlayBuf.ar(2, ~test, BufRateScale.kr(~test)\*5, 1, 0, 0, 2)}.play;
+{ PlayBuf.ar(2, ~test, 6)}.play;
+
+// 比較対照: rate=1 (8.8% 遅く、低く)
+{ PlayBuf.ar(2, ~test.bufnum, 1, doneAction: 2) }.play;
+
+a = Buffer.read(s, "/Users/natsuki/Development/php-beatmaker/samples/rythm01.wav");
+a.play;
+{PlayBuf.ar(2, a, BufRateScale.kr(1)\*2, 1, 0, 0, 2)}.play;
+a.sampleRate;
