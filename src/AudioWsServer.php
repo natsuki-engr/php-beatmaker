@@ -4,19 +4,39 @@ namespace PhpBeatMaker;
 
 use Ratchet\MessageComponentInterface;
 use Ratchet\ConnectionInterface;
+use Ratchet\RFC6455\Messaging\Frame;
 
 class AudioWsServer implements MessageComponentInterface
 {
     /** @var array<int, array{pad: string, size: int}> */
     private array $pending = [];
 
+    /**
+     * @param array<string, string> $presets pad → wav path
+     */
     public function __construct(
-        private OscGateway $osc
+        private OscGateway $osc,
+        private array $presets = [],
     ) {}
 
     public function onOpen(ConnectionInterface $conn)
     {
         echo "WS connected: {$conn->resourceId}\n";
+
+        foreach ($this->presets as $pad => $path) {
+            if (!is_file($path)) {
+                echo "preset missing: pad={$pad} path={$path}\n";
+                continue;
+            }
+            $this->osc->load((string) $pad, $path);
+            $bytes = file_get_contents($path);
+            $conn->send(json_encode([
+                'type' => 'preset',
+                'pad'  => (string) $pad,
+                'size' => strlen($bytes),
+            ]));
+            $conn->send(new Frame($bytes, true, Frame::OP_BINARY));
+        }
     }
 
     public function onMessage(ConnectionInterface $from, $msg)

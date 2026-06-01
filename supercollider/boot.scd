@@ -34,8 +34,8 @@ SynthDef(\samplePlayer, {
 
 (
 OSCdef(\loadSample, { |msg|
-    var name = msg[1];
-    var path = msg[2].asString;
+var name = msg[1];
+var path = msg[2].asString;
 
     "--- /load received ---".postln;
     ("  msg:    " ++ msg).postln;
@@ -84,14 +84,14 @@ OSCdef(\playSample, { |msg|
         );
 
     } {
-		("sample not found: " ++ name).postln;
+    	("sample not found: " ++ name).postln;
     };
 
-	buffer = ~samples[name];
+    buffer = ~samples[name];
 
-	if(buffer.notNil) {
-		("frames=" ++ buffer.numFrames).postln;
-	};
+    if(buffer.notNil) {
+    	("frames=" ++ buffer.numFrames).postln;
+    };
 
 }, '/play');
 )

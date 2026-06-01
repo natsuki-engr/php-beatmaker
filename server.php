@@ -18,12 +18,14 @@ $client->set_destination('127.0.0.1', 57120);
 
 $osc = new OscGateway($client);
 
+$presets = require __DIR__ . '/presets.php';
+
 $socket = new SocketServer('0.0.0.0:8080', [], $loop);
 
 $server = new IoServer(
     new HttpServer(
         new WsServer(
-            new AudioWsServer($osc)
+            new AudioWsServer($osc, $presets)
         )
     ),
     $socket,

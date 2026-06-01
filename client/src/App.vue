@@ -1,16 +1,104 @@
 <script setup lang="ts">
-import { ref, onUnmounted } from "vue"
-import { ws, connected } from "./socket.ts"
-import { startRecording, stopRecording } from "./recorder.ts"
+import { ref, nextTick, onUnmounted } from "vue"
+import { ws, connected, onPreset } from "./socket.ts"
+import { startRecording, stopRecording, computePeaks, PEAK_BUCKETS } from "./recorder.ts"
 
 const PAD_COUNT = 8
 
 const recording = ref(false)
 const loadedPads = ref<Set<string>>(new Set())
+const padPeaks = ref<Map<string, Float32Array>>(new Map())
 const elapsed = ref(0)
 
 let timer: number | null = null
 let recordStart = 0
+
+let decodeContext: AudioContext | null = null
+function getDecodeContext(): AudioContext {
+  if (!decodeContext) decodeContext = new AudioContext()
+  return decodeContext
+}
+
+onPreset(async (pad, wav) => {
+  const buffer = await getDecodeContext().decodeAudioData(wav)
+  const peaks = computePeaks(buffer.getChannelData(0), PEAK_BUCKETS)
+  padPeaks.value.set(pad, peaks)
+  loadedPads.value.add(pad)
+  await nextTick()
+  redrawAll()
+})
+
+const canvasMap = new Map<string, HTMLCanvasElement>()
+const resizeObserver = new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    const pad = (entry.target as HTMLCanvasElement).dataset.pad
+    if (pad) drawWave(pad)
+  }
+})
+
+function bindCanvas(pad: string, el: HTMLCanvasElement | null) {
+  const prev = canvasMap.get(pad)
+  if (prev && prev !== el) resizeObserver.unobserve(prev)
+  if (!el) {
+    canvasMap.delete(pad)
+    return
+  }
+  el.dataset.pad = pad
+  canvasMap.set(pad, el)
+  resizeObserver.observe(el)
+  drawWave(pad)
+}
+
+function computeGlobalScale(): number {
+  const abs: number[] = []
+  for (const peaks of padPeaks.value.values()) {
+    for (let i = 0; i < peaks.length; i++) {
+      abs.push(Math.abs(peaks[i]))
+    }
+  }
+  if (abs.length === 0) return 1
+  abs.sort((a, b) => a - b)
+  const p95 = abs[Math.min(abs.length - 1, Math.floor(abs.length * 0.95))]
+  return p95 > 0 ? 1 / p95 : 1
+}
+
+function redrawAll() {
+  for (const pad of canvasMap.keys()) drawWave(pad)
+}
+
+function drawWave(pad: string) {
+  const canvas = canvasMap.get(pad)
+  const peaks = padPeaks.value.get(pad)
+  if (!canvas || !peaks) return
+
+  const dpr = window.devicePixelRatio || 1
+  const cssW = canvas.clientWidth
+  const cssH = canvas.clientHeight
+  if (cssW === 0 || cssH === 0) return
+
+  canvas.width = Math.round(cssW * dpr)
+  canvas.height = Math.round(cssH * dpr)
+
+  const ctx = canvas.getContext("2d")
+  if (!ctx) return
+  ctx.scale(dpr, dpr)
+  ctx.clearRect(0, 0, cssW, cssH)
+
+  const buckets = peaks.length / 2
+  const mid = cssH / 2
+  const barW = cssW / buckets
+  const scale = computeGlobalScale()
+
+  ctx.fillStyle = "rgba(140, 170, 255, 0.85)"
+  for (let i = 0; i < buckets; i++) {
+    const min = Math.max(-1, Math.min(1, peaks[i * 2] * scale))
+    const max = Math.max(-1, Math.min(1, peaks[i * 2 + 1] * scale))
+    const y1 = mid - max * mid
+    const y2 = mid - min * mid
+    const h = Math.max(1, y2 - y1)
+    ctx.fillRect(i * barW, y1, Math.max(1, barW - 0.5), h)
+  }
+}
 
 function play(pad: string) {
   ws.send(JSON.stringify({ type: "play", pad }))
@@ -36,7 +124,7 @@ async function toggleRecord() {
     return
   }
 
-  const blob = await stopRecording()
+  const { blob, peaks } = await stopRecording()
   recording.value = false
   if (timer !== null) {
     clearInterval(timer)
@@ -46,13 +134,17 @@ async function toggleRecord() {
   const pad = nextPad()
   ws.send(JSON.stringify({ type: "upload", pad, size: blob.size }))
   ws.send(await blob.arrayBuffer())
+  padPeaks.value.set(pad, peaks)
   loadedPads.value.add(pad)
+  await nextTick()
+  redrawAll()
 
   console.log(`Sent ${blob.size} bytes → pad ${pad}`)
 }
 
 onUnmounted(() => {
   if (timer !== null) clearInterval(timer)
+  resizeObserver.disconnect()
 })
 </script>
 
@@ -70,7 +162,12 @@ onUnmounted(() => {
       :disabled="!loadedPads.has(String(n))"
       @click="play(String(n))"
     >
-      {{ n }}
+      <canvas
+        v-if="padPeaks.has(String(n))"
+        :ref="(el) => bindCanvas(String(n), el as HTMLCanvasElement | null)"
+        class="pad-waveform"
+      />
+      <span class="pad-label">{{ n }}</span>
     </button>
   </section>
 
@@ -106,6 +203,8 @@ onUnmounted(() => {
 }
 
 .pad {
+  position: relative;
+  overflow: hidden;
   font-size: 2.5rem;
   font-weight: bold;
   border: 3px solid #555;
@@ -119,6 +218,20 @@ onUnmounted(() => {
   background: #1e2a4a;
   color: #fff;
   border-color: #66f;
+}
+.pad-waveform {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.pad-label {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.6rem;
+  font-size: 1.1rem;
+  opacity: 0.85;
 }
 .pad:active:not(:disabled) {
   background: #335;
