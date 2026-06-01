@@ -9,6 +9,7 @@ const recording = ref(false)
 const loadedPads = ref<Set<string>>(new Set())
 const padPeaks = ref<Map<string, Float32Array>>(new Map())
 const elapsed = ref(0)
+const deleteMode = ref(false)
 
 let timer: number | null = null
 let recordStart = 0
@@ -104,6 +105,22 @@ function play(pad: string) {
   ws.send(JSON.stringify({ type: "play", pad }))
 }
 
+function onPadClick(pad: string) {
+  if (deleteMode.value) {
+    if (loadedPads.value.has(pad)) clearPad(pad)
+    return
+  }
+  play(pad)
+}
+
+function clearPad(pad: string) {
+  ws.send(JSON.stringify({ type: "clear", pad }))
+  padPeaks.value.delete(pad)
+  loadedPads.value.delete(pad)
+  if (loadedPads.value.size === 0) deleteMode.value = false
+  redrawAll()
+}
+
 function nextPad(): string {
   for (let i = 1; i <= PAD_COUNT; i++) {
     const p = String(i)
@@ -158,9 +175,9 @@ onUnmounted(() => {
       v-for="n in PAD_COUNT"
       :key="n"
       class="pad"
-      :class="{ loaded: loadedPads.has(String(n)) }"
+      :class="{ loaded: loadedPads.has(String(n)), 'delete-target': deleteMode && loadedPads.has(String(n)) }"
       :disabled="!loadedPads.has(String(n))"
-      @click="play(String(n))"
+      @click="onPadClick(String(n))"
     >
       <canvas
         v-if="padPeaks.has(String(n))"
@@ -168,12 +185,28 @@ onUnmounted(() => {
         class="pad-waveform"
       />
       <span class="pad-label">{{ n }}</span>
+      <span v-if="deleteMode && loadedPads.has(String(n))" class="pad-delete-mark" />
     </button>
   </section>
 
   <section class="controls">
-    <button class="rec" :class="{ active: recording }" @click="toggleRecord">
+    <button
+      class="rec"
+      :class="{ active: recording }"
+      :disabled="deleteMode"
+      @click="toggleRecord"
+    >
       {{ recording ? `STOP ${elapsed.toFixed(1)}s` : "REC" }}
+    </button>
+    <button
+      class="delete-toggle"
+      :class="{ active: deleteMode }"
+      :disabled="recording"
+      :aria-label="deleteMode ? '削除モード解除' : '削除モード'"
+      @click="deleteMode = !deleteMode"
+    >
+      <span v-if="deleteMode" class="icon-close" />
+      <span v-else class="icon-trash" />
     </button>
   </section>
 </template>
@@ -233,6 +266,23 @@ onUnmounted(() => {
   font-size: 1.1rem;
   opacity: 0.85;
 }
+.pad-delete-mark {
+  position: absolute;
+  inset: 0;
+  background: rgba(180, 40, 40, 0.55);
+  pointer-events: none;
+}
+.pad-delete-mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  -webkit-mask: url('/close-svgrepo-com.svg') center / 40% no-repeat;
+  mask: url('/close-svgrepo-com.svg') center / 40% no-repeat;
+}
+.pad.delete-target {
+  border-color: #c33;
+}
 .pad:active:not(:disabled) {
   background: #335;
   transform: scale(0.97);
@@ -244,11 +294,12 @@ onUnmounted(() => {
 .controls {
   display: flex;
   justify-content: center;
+  gap: 0.5rem;
   padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom));
 }
 .rec {
-  width: 100%;
-  max-width: 480px;
+  flex: 1;
+  max-width: 380px;
   padding: 1.25rem;
   font-size: 1.5rem;
   font-weight: bold;
@@ -262,6 +313,45 @@ onUnmounted(() => {
 .rec.active {
   background: #c33;
   animation: pulse 1s infinite;
+}
+.rec:disabled {
+  opacity: 0.4;
+  cursor: default;
+  animation: none;
+}
+.delete-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem 1.4rem;
+  background: #555;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  min-width: 4.5rem;
+}
+.delete-toggle.active {
+  background: #c33;
+}
+.delete-toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.icon-trash,
+.icon-close {
+  display: inline-block;
+  width: 1.6rem;
+  height: 1.6rem;
+  background: currentColor;
+}
+.icon-trash {
+  -webkit-mask: url('/trash-svgrepo-com.svg') center / contain no-repeat;
+  mask: url('/trash-svgrepo-com.svg') center / contain no-repeat;
+}
+.icon-close {
+  -webkit-mask: url('/close-svgrepo-com.svg') center / contain no-repeat;
+  mask: url('/close-svgrepo-com.svg') center / contain no-repeat;
 }
 
 @keyframes pulse {

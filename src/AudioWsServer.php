@@ -59,11 +59,28 @@ class AudioWsServer implements MessageComponentInterface
             'play' => $this->play($data),
             'load' => $this->load($data),
             'upload' => $this->upload($from, $data),
+            'clear' => $this->clear($data),
 
             default => (function () {
                 echo "unknown type\n";
             })()
         };
+    }
+
+    private function clear(array $data): void
+    {
+        $pad = $data['pad'] ?? null;
+
+        if (!$pad) {
+            echo "missing pad\n";
+            return;
+        }
+
+        $upload = __DIR__ . "/../samples/uploads/pad-{$pad}.wav";
+        if (is_file($upload)) {
+            unlink($upload);
+            echo "removed: {$upload}\n";
+        }
     }
 
     private function play(array $data): void
