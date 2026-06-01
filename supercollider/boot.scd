@@ -1,12 +1,17 @@
 ServerOptions.devices;
-ServerOptions.devices.do(_.postln);
+ServerOptions.devices.do(\_.postln);
 // [Nothing Ear (a), Nothing Ear (a), Background Music, Background Music (UI Sounds), MacBook Proの, MacBook Proのス]
-
 
 s.options.numInputBusChannels = 0;
 // s.options.numOutputBusChannels = 1;
 s.options.outDevice = "Nothing Ear (a)";
+// s.options.outDevice = "SRS-XB10";
+s.options.outDevice = "MacBook Proの";
+s.options.sampleRate = 48000;
+s.boot;
 s.reboot;
+s.sampleRate.postln;
+s.serverRunning;
 
 ~samples = IdentityDictionary.new;
 
