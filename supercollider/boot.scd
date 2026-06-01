@@ -12,13 +12,14 @@ s.reboot;
 
 (
 SynthDef(\samplePlayer, {
-    |bufnum, amp = 1|
+|buf, amp = 1|
 
     var sig;
 
     sig = PlayBuf.ar(
-        numChannels: 2,
-        bufnum: bufnum,
+        numChannels: 1,
+        bufnum: buf,
+        rate: BufRateScale.kr(buf),
         doneAction: 2
     );
 
@@ -72,7 +73,7 @@ OSCdef(\playSample, { |msg|
         Synth(
             \samplePlayer,
             [
-                \bufnum,
+                \buf,
                 buffer.bufnum
             ]
         );
