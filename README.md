@@ -6,6 +6,12 @@ PHP Beatmaker is an experimental project for building a **Koala-like sampler and
 
 ---
 
+## Demo
+
+https://github.com/user-attachments/assets/59119174-3a68-4887-8a12-335764e55ff5
+
+---
+
 ## Overview
 
 - 🎛 Browser UI (Vite / Vue)
