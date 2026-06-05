@@ -2,7 +2,7 @@
 
 A lightweight browser-controlled beatmaking system powered by PHP, SuperCollider, and WebSockets.
 
-PHP Beatmaker is an experimental project for building a **Koala-like sampler and Strudel-like pattern engine** using PHP as a real-time audio control layer.
+PHP Beatmaker is an experimental project for building a **Koala-like sampler** using PHP as a real-time audio control layer.
 
 ---
 
@@ -92,8 +92,7 @@ Early prototype:
 - OSC communication working
 - sample loading working
 - basic playback working
-- WebSocket layer in progress
-
+- WebSocket layer working
 
 ## License
 
