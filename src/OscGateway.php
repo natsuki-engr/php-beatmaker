@@ -22,4 +22,18 @@ class OscGateway
             new OSCMessage('/load', [$pad, $path])
         );
     }
+
+    public function listDevices(): void
+    {
+        $this->client->sendAsync(
+            new OSCMessage('/listDevices', [])
+        );
+    }
+
+    public function setOutDevice(string $device): void
+    {
+        $this->client->sendAsync(
+            new OSCMessage('/setOutDevice', [$device])
+        );
+    }
 }

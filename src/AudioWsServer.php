@@ -11,17 +11,23 @@ class AudioWsServer implements MessageComponentInterface
     /** @var array<int, array{pad: string, size: int}> */
     private array $pending = [];
 
+    private \SplObjectStorage $clients;
+
     /**
      * @param array<string, string> $presets pad → wav path
      */
     public function __construct(
         private OscGateway $osc,
         private array $presets = [],
-    ) {}
+    ) {
+        $this->clients = new \SplObjectStorage();
+    }
 
     public function onOpen(ConnectionInterface $conn)
     {
         echo "WS connected: {$conn->resourceId}\n";
+
+        $this->clients->attach($conn);
 
         foreach ($this->presets as $pad => $path) {
             if (!is_file($path)) {
@@ -60,11 +66,42 @@ class AudioWsServer implements MessageComponentInterface
             'load' => $this->load($data),
             'upload' => $this->upload($from, $data),
             'clear' => $this->clear($data),
+            'list-devices' => $this->osc->listDevices(),
+            'set-device' => $this->setDevice($data),
 
             default => (function () {
                 echo "unknown type\n";
             })()
         };
+    }
+
+    private function setDevice(array $data): void
+    {
+        $device = $data['device'] ?? null;
+
+        if (!$device) {
+            echo "missing device\n";
+            return;
+        }
+
+        $this->osc->setOutDevice($device);
+    }
+
+    /**
+     * Broadcast the audio device list (from SuperCollider) to every client.
+     *
+     * @param array<int, mixed> $devices
+     */
+    public function broadcastDevices(array $devices): void
+    {
+        $payload = json_encode([
+            'type'    => 'devices',
+            'devices' => array_values($devices),
+        ]);
+
+        foreach ($this->clients as $client) {
+            $client->send($payload);
+        }
     }
 
     private function clear(array $data): void
@@ -145,6 +182,7 @@ class AudioWsServer implements MessageComponentInterface
 
     public function onClose(ConnectionInterface $conn)
     {
+        $this->clients->detach($conn);
         unset($this->pending[$conn->resourceId]);
         echo "WS closed: {$conn->resourceId}\n";
     }

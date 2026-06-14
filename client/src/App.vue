@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, nextTick, onUnmounted } from "vue"
-import { ws, connected, onPreset } from "./socket.ts"
+import { ws, connected, devices, onPreset } from "./socket.ts"
+import { selectedDevice } from "./outDevice.ts"
 import { startRecording, stopRecording, computePeaks, PEAK_BUCKETS } from "./recorder.ts"
 
 const PAD_COUNT = 8
@@ -170,6 +171,13 @@ onUnmounted(() => {
     {{ connected ? "● connected" : "○ disconnected" }}
   </header>
 
+  <section v-if="devices.length" class="device-bar">
+    <label class="device-label">OUT</label>
+    <select class="device-select" v-model="selectedDevice">
+      <option v-for="d in devices" :key="d" :value="d">{{ d }}</option>
+    </select>
+  </section>
+
   <section class="grid">
     <button
       v-for="n in PAD_COUNT"
@@ -223,6 +231,30 @@ onUnmounted(() => {
 .status.ok {
   background: #1a5;
   color: #fff;
+}
+
+.device-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #2a2a2a;
+}
+.device-label {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #888;
+  letter-spacing: 0.1em;
+}
+.device-select {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem;
+  background: #1e1e1e;
+  color: #ddd;
+  border: 1px solid #555;
+  border-radius: 0.4rem;
+  font-size: 0.9rem;
 }
 
 .grid {
