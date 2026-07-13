@@ -17,14 +17,20 @@ s.options.inDevice = "MacBook Proの";
 // Runs after each (re)boot so switching the output device keeps samples alive.
 ~setup = {
 	Routine({
-		SynthDef(\samplePlayer, { |buf, amp = 1|
-			var sig = PlayBuf.ar(
-				numChannels: 1,
-				bufnum: buf,
-				rate: BufRateScale.kr(buf),
+		// start/end are normalized fractions (0..1) of the buffer.
+		// The trim region is derived on the server via BufFrames/BufDur,
+		// so it needs no language-side buffer info.
+		SynthDef(\samplePlayer, { |buf, amp = 1, start = 0, end = 1|
+			var rate = BufRateScale.kr(buf);
+			var startFrame = start * BufFrames.kr(buf);
+			var dur = (end - start) * BufDur.kr(buf);
+			var sig = PlayBuf.ar(2, buf, rate, startPos: startFrame, loop: 0);
+			// play for `dur` seconds then free (with short fades to avoid clicks)
+			var env = EnvGen.kr(
+				Env([0, 1, 1, 0], [0.003, max(dur - 0.006, 0.001), 0.003]),
 				doneAction: 2
 			);
-			Out.ar(0, sig * amp);
+			Out.ar(0, sig * amp * env);
 		}).add;
 		s.sync;
 
@@ -54,10 +60,13 @@ OSCdef(\loadSample, { |msg|
 
 OSCdef(\playSample, { |msg|
 	var name = msg[1];
+	// start/end are normalized fractions (0..1); end defaults to 1 (to the tail)
+	var start = (msg[2] ? 0).asFloat;
+	var end = (msg[3] ? 1).asFloat;
 	var buffer = ~samples[name];
 
 	if(buffer.notNil) {
-		Synth(\samplePlayer, [\buf, buffer.bufnum]);
+		Synth(\samplePlayer, [\buf, buffer.bufnum, \start, start, \end, end]);
 	} {
 		("sample not found: " ++ name).postln;
 	};

@@ -2,15 +2,19 @@
 import { ref, nextTick, onUnmounted } from "vue"
 import { ws, connected, devices, onPreset } from "./socket.ts"
 import { selectedDevice } from "./outDevice.ts"
+import { getTrim, setTrim, clearTrim, type Trim } from "./trim.ts"
 import { startRecording, stopRecording, computePeaks, PEAK_BUCKETS } from "./recorder.ts"
+import TrimSheet from "./components/TrimSheet.vue"
 
 const PAD_COUNT = 8
 
 const recording = ref(false)
 const loadedPads = ref<Set<string>>(new Set())
 const padPeaks = ref<Map<string, Float32Array>>(new Map())
+const padDurations = ref<Map<string, number>>(new Map())
 const elapsed = ref(0)
 const deleteMode = ref(false)
+const editingPad = ref<string | null>(null)
 
 let timer: number | null = null
 let recordStart = 0
@@ -25,6 +29,7 @@ onPreset(async (pad, wav) => {
   const buffer = await getDecodeContext().decodeAudioData(wav)
   const peaks = computePeaks(buffer.getChannelData(0), PEAK_BUCKETS)
   padPeaks.value.set(pad, peaks)
+  padDurations.value.set(pad, buffer.duration)
   loadedPads.value.add(pad)
   await nextTick()
   redrawAll()
@@ -51,11 +56,21 @@ function bindCanvas(pad: string, el: HTMLCanvasElement | null) {
   drawWave(pad)
 }
 
+// Pads render only the trimmed region; the full waveform is shown in the trim sheet.
+function trimmedBuckets(pad: string, buckets: number): [number, number] {
+  const [start, end] = getTrim(pad)
+  const from = Math.max(0, Math.floor(start * buckets))
+  const to = Math.min(buckets, Math.ceil(end * buckets))
+  return [from, Math.max(from + 1, to)]
+}
+
 function computeGlobalScale(): number {
   const abs: number[] = []
-  for (const peaks of padPeaks.value.values()) {
-    for (let i = 0; i < peaks.length; i++) {
-      abs.push(Math.abs(peaks[i]))
+  for (const [pad, peaks] of padPeaks.value.entries()) {
+    const buckets = peaks.length / 2
+    const [from, to] = trimmedBuckets(pad, buckets)
+    for (let i = from; i < to; i++) {
+      abs.push(Math.abs(peaks[i * 2]), Math.abs(peaks[i * 2 + 1]))
     }
   }
   if (abs.length === 0) return 1
@@ -87,26 +102,54 @@ function drawWave(pad: string) {
   ctx.clearRect(0, 0, cssW, cssH)
 
   const buckets = peaks.length / 2
+  const [from, to] = trimmedBuckets(pad, buckets)
   const mid = cssH / 2
-  const barW = cssW / buckets
+  const barW = cssW / (to - from)
   const scale = computeGlobalScale()
 
   ctx.fillStyle = "rgba(140, 170, 255, 0.85)"
-  for (let i = 0; i < buckets; i++) {
+  for (let i = from; i < to; i++) {
     const min = Math.max(-1, Math.min(1, peaks[i * 2] * scale))
     const max = Math.max(-1, Math.min(1, peaks[i * 2 + 1] * scale))
     const y1 = mid - max * mid
     const y2 = mid - min * mid
     const h = Math.max(1, y2 - y1)
-    ctx.fillRect(i * barW, y1, Math.max(1, barW - 0.5), h)
+    ctx.fillRect((i - from) * barW, y1, Math.max(1, barW - 0.5), h)
   }
 }
 
-function play(pad: string) {
-  ws.send(JSON.stringify({ type: "play", pad }))
+function play(pad: string, trim: Trim = getTrim(pad)) {
+  const [start, end] = trim
+  ws.send(JSON.stringify({ type: "play", pad, start, end }))
+}
+
+// long-press detection to open the trim sheet without breaking tap-to-play
+let pressTimer: number | null = null
+let longPressed = false
+
+function onPadPointerDown(pad: string) {
+  if (deleteMode.value || !loadedPads.value.has(pad)) return
+  longPressed = false
+  pressTimer = window.setTimeout(() => {
+    pressTimer = null
+    longPressed = true
+    navigator.vibrate?.(10)
+    editingPad.value = pad
+  }, 400)
+}
+
+function cancelPress() {
+  if (pressTimer !== null) {
+    clearTimeout(pressTimer)
+    pressTimer = null
+  }
 }
 
 function onPadClick(pad: string) {
+  if (longPressed) {
+    longPressed = false
+    return
+  }
   if (deleteMode.value) {
     if (loadedPads.value.has(pad)) clearPad(pad)
     return
@@ -117,9 +160,21 @@ function onPadClick(pad: string) {
 function clearPad(pad: string) {
   ws.send(JSON.stringify({ type: "clear", pad }))
   padPeaks.value.delete(pad)
+  padDurations.value.delete(pad)
+  clearTrim(pad)
   loadedPads.value.delete(pad)
   if (loadedPads.value.size === 0) deleteMode.value = false
   redrawAll()
+}
+
+function onTrimSave(trim: Trim) {
+  if (editingPad.value) setTrim(editingPad.value, trim)
+  editingPad.value = null
+  redrawAll()
+}
+
+function onTrimPreview(trim: Trim) {
+  if (editingPad.value) play(editingPad.value, trim)
 }
 
 function nextPad(): string {
@@ -142,7 +197,7 @@ async function toggleRecord() {
     return
   }
 
-  const { blob, peaks } = await stopRecording()
+  const { blob, peaks, duration } = await stopRecording()
   recording.value = false
   if (timer !== null) {
     clearInterval(timer)
@@ -153,6 +208,8 @@ async function toggleRecord() {
   ws.send(JSON.stringify({ type: "upload", pad, size: blob.size }))
   ws.send(await blob.arrayBuffer())
   padPeaks.value.set(pad, peaks)
+  padDurations.value.set(pad, duration)
+  clearTrim(pad)
   loadedPads.value.add(pad)
   await nextTick()
   redrawAll()
@@ -186,6 +243,10 @@ onUnmounted(() => {
       :class="{ loaded: loadedPads.has(String(n)), 'delete-target': deleteMode && loadedPads.has(String(n)) }"
       :disabled="!loadedPads.has(String(n))"
       @click="onPadClick(String(n))"
+      @pointerdown="onPadPointerDown(String(n))"
+      @pointerup="cancelPress"
+      @pointerleave="cancelPress"
+      @pointercancel="cancelPress"
     >
       <canvas
         v-if="padPeaks.has(String(n))"
@@ -196,6 +257,16 @@ onUnmounted(() => {
       <span v-if="deleteMode && loadedPads.has(String(n))" class="pad-delete-mark" />
     </button>
   </section>
+
+  <TrimSheet
+    v-if="editingPad && padPeaks.has(editingPad)"
+    :peaks="padPeaks.get(editingPad)!"
+    :trim="getTrim(editingPad)"
+    :duration="padDurations.get(editingPad)"
+    @save="onTrimSave"
+    @preview="onTrimPreview"
+    @cancel="editingPad = null"
+  />
 
   <section class="controls">
     <button

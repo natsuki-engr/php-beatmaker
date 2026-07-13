@@ -129,7 +129,10 @@ class AudioWsServer implements MessageComponentInterface
             return;
         }
 
-        $this->osc->play($pad);
+        $start = isset($data['start']) ? (float) $data['start'] : 0.0;
+        $end   = isset($data['end']) ? (float) $data['end'] : 1.0;
+
+        $this->osc->play($pad, $start, $end);
     }
 
     private function load(array $data): void

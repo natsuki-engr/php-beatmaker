@@ -9,10 +9,10 @@ class OscGateway
 {
     public function __construct(private OSCClient $client) {}
 
-    public function play(string $pad): void
+    public function play(string $pad, float $start = 0.0, float $end = 1.0): void
     {
         $this->client->sendAsync(
-            new OSCMessage('/play', [$pad])
+            new OSCMessage('/play', [$pad, $start, $end])
         );
     }
 

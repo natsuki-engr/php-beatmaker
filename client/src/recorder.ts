@@ -28,7 +28,7 @@ export async function startRecording(): Promise<void> {
   mute.connect(audioContext.destination);
 }
 
-export async function stopRecording(): Promise<{ blob: Blob; peaks: Float32Array }> {
+export async function stopRecording(): Promise<{ blob: Blob; peaks: Float32Array; duration: number }> {
   processor?.disconnect();
   source?.disconnect();
   mediaStream?.getTracks().forEach((t) => t.stop());
@@ -36,6 +36,7 @@ export async function stopRecording(): Promise<{ blob: Blob; peaks: Float32Array
 
   const wav = encodeWav(chunks, sampleRate);
   const peaks = computePeaks(chunks, PEAK_BUCKETS);
+  const duration = chunks.reduce((s, c) => s + c.length, 0) / sampleRate;
 
   mediaStream = null;
   audioContext = null;
@@ -43,7 +44,7 @@ export async function stopRecording(): Promise<{ blob: Blob; peaks: Float32Array
   processor = null;
   chunks = [];
 
-  return { blob: new Blob([wav], { type: "audio/wav" }), peaks };
+  return { blob: new Blob([wav], { type: "audio/wav" }), peaks, duration };
 }
 
 export function computePeaks(input: Float32Array | Float32Array[], buckets: number): Float32Array {
